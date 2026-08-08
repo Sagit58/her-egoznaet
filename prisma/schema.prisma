@@ -1,0 +1,281 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMINISTRATOR
+  DIRECTOR
+  MANAGER
+  SURVEYOR
+  DESIGNER
+  PRODUCTION
+  INSTALLER
+  WAREHOUSE
+  ACCOUNTANT
+}
+
+model Branch {
+  id        String   @id @default(uuid())
+  name      String
+  address   String?
+    phone        String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  departments Department[]
+  employees   Employee[]
+
+  @@map("branches")
+}
+
+model Department {
+  id        String   @id @default(uuid())
+  name      String
+  branchId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  branch    Branch     @relation(fields: [branchId], references: [id])
+  employees Employee[]
+
+  @@map("departments")
+}
+
+model Employee {
+  id           String   @id @default(uuid())
+  firstName    String
+  lastName     String
+  middleName   String?
+  telegramId   BigInt?  @unique
+  phone        String?
+  role         Role     @default(MANAGER)
+  branchId     String?
+  departmentId String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
+
+  branch     Branch?           @relation(fields: [branchId], references: [id])
+  department Department?       @relation(fields: [departmentId], references: [id])
+  sessions   EmployeeSession[]
+    notes      CustomerNote[]
+      managedOrders  Order[]
+  assignedStages OrderStage[]
+    files          FileEntity[]
+
+  @@map("employees")
+}
+
+model EmployeeSession {
+  id               String   @id @default(uuid())
+  employeeId       String
+  refreshTokenHash String
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@map("employee_sessions")
+}
+model Customer {
+  id         String   @id @default(uuid())
+  firstName  String
+  lastName   String
+  middleName String?
+  phone      String
+  email      String?
+  comment    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+
+  contacts   CustomerContact[]
+  notes      CustomerNote[]
+  graveSites GraveSite[]
+    orders     Order[]
+      files      FileEntity[]
+      
+  @@map("customers")
+}
+
+model CustomerContact {
+  id         String   @id @default(uuid())
+  customerId String
+  name       String
+  phone      String
+  relation   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@map("customer_contacts")
+}
+
+model CustomerNote {
+  id         String   @id @default(uuid())
+  customerId String
+  authorId   String
+  text       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+
+  customer Customer @relation(fields: [customerId], references: [id])
+  author   Employee @relation(fields: [authorId], references: [id])
+
+  @@map("customer_notes")
+}
+
+model GraveSite {
+  id        String   @id @default(uuid())
+  customerId String
+  name      String
+    address   String?
+  latitude  Float?
+  longitude Float?
+  size      String?
+  features  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  customer Customer @relation(fields: [customerId], references: [id])
+  burials  Burial[]
+    orders   Order[]
+
+  @@map("grave_sites")
+}
+
+model Burial {
+  id          String    @id @default(uuid())
+  graveSiteId String
+  fullName    String
+  birthDate   DateTime?
+  deathDate   DateTime?
+  comment     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  graveSite GraveSite @relation(fields: [graveSiteId], references: [id])
+
+  @@map("burials")
+}
+enum OrderStatus {
+  NEW
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum OrderStageType {
+  SURVEY
+  DESIGN
+  PRODUCTION
+  INSTALLATION
+}
+
+enum StageStatus {
+  PENDING
+  IN_PROGRESS
+  DONE
+}
+
+model Order {
+  id          String      @id @default(uuid())
+  number      Int         @unique
+  customerId  String
+  graveSiteId String?
+  managerId   String?
+  status      OrderStatus @default(NEW)
+  comment     String?
+  totalAmount Decimal     @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  deletedAt   DateTime?
+
+  customer  Customer     @relation(fields: [customerId], references: [id])
+  graveSite GraveSite?   @relation(fields: [graveSiteId], references: [id])
+  manager   Employee?    @relation(fields: [managerId], references: [id])
+  stages    OrderStage[]
+  payments  Payment[]
+    files     FileEntity[]
+
+  @@map("orders")
+}
+
+model OrderStage {
+  id                 String       @id @default(uuid())
+  orderId            String
+  type               OrderStageType
+  status             StageStatus  @default(PENDING)
+  assignedEmployeeId String?
+  plannedStart       DateTime?
+  plannedEnd         DateTime?
+  completedAt        DateTime?
+  comment            String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  order            Order     @relation(fields: [orderId], references: [id])
+  assignedEmployee Employee? @relation(fields: [assignedEmployeeId], references: [id])
+
+  @@unique([orderId, type])
+  @@map("order_stages")
+}
+
+model Payment {
+  id        String   @id @default(uuid())
+  orderId   String
+  amount    Decimal
+  method    String
+  paidAt    DateTime @default(now())
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@map("payments")
+}
+enum FileCategory {
+  SURVEY_PHOTO
+  DESIGN
+  PRODUCTION_PHOTO
+  INSTALLATION_PHOTO
+  DOCUMENT
+}
+
+model FileEntity {
+  id           String       @id @default(uuid())
+  ownerId      String
+  orderId      String?
+  customerId   String?
+  category     FileCategory
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  storageKey   String       @unique
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  deletedAt    DateTime?
+
+  owner    Employee  @relation(fields: [ownerId], references: [id])
+  order    Order?    @relation(fields: [orderId], references: [id])
+  customer Customer? @relation(fields: [customerId], references: [id])
+
+  @@map("files")
+}

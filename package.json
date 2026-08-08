@@ -1,0 +1,48 @@
+{
+  "name": "monumenterp",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1106.0",
+    "@aws-sdk/s3-request-presigner": "^3.1106.0",
+    "@fastify/cors": "^11.3.0",
+    "@fastify/multipart": "^10.1.0",
+    "@fastify/swagger": "^9.8.1",
+    "@fastify/swagger-ui": "^6.1.1",
+    "@prisma/client": "^6.19.3",
+    "@twa-dev/sdk": "^8.0.2",
+    "axios": "^1.19.0",
+    "clsx": "^2.1.1",
+    "dotenv": "^17.4.2",
+    "fastify": "^5.11.2",
+    "framer-motion": "^13.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "lucide-react": "^1.30.0",
+    "pino": "^10.3.1",
+    "prisma": "^6.19.3",
+    "tailwind-merge": "^3.6.0",
+    "uuid": "^14.0.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^26.1.2",
+    "@types/uuid": "^10.0.0",
+    "pino-pretty": "^13.1.3",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.11",
+    "typescript": "^7.0.2"
+  }
+}
