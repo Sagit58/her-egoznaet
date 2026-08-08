@@ -12,6 +12,7 @@ export const APP_ERROR_CODES = [
   'STATUS_TRANSITION_INVALID',
   'FILE_TOO_LARGE',
   'FILE_CATEGORY_INVALID',
+  'ORDER_NUMBER_EXISTS',
 ] as const;
 
 export type AppErrorCode = (typeof APP_ERROR_CODES)[number];

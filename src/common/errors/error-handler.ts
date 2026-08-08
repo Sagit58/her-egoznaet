@@ -17,12 +17,12 @@ export const registerErrorHandler = (app: FastifyInstance): void => {
       return;
     }
 
-    if (error.validation) {
+    if (error instanceof Error && 'validation' in error) {
       reply.status(400).send({
         error: {
           code: 'VALIDATION_ERROR',
           message: 'Request validation failed',
-          details: error.validation,
+          details: (error as { validation?: unknown }).validation,
           requestId: request.id,
         },
       });

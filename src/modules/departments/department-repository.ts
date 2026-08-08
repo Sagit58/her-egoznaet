@@ -33,8 +33,15 @@ export interface DepartmentListArgs {
 
 export class DepartmentRepository {
   async create(input: DepartmentWriteInput): Promise<DepartmentRecord> {
+    if (!input.branchId) {
+      throw new Error('branchId is required to create a department');
+    }
+
     return prisma.department.create({
-      data: { ...input },
+      data: {
+        name: input.name,
+        branch: { connect: { id: input.branchId } },
+      },
       include: departmentInclude,
     });
   }
@@ -56,9 +63,19 @@ export class DepartmentRepository {
       return null;
     }
 
+    const data: Prisma.DepartmentUpdateInput = {};
+
+    if (input.name !== undefined) {
+      data.name = input.name;
+    }
+
+    if (input.branchId) {
+      data.branch = { connect: { id: input.branchId } };
+    }
+
     return prisma.department.update({
       where: { id },
-      data: { ...input },
+      data,
       include: departmentInclude,
     });
   }

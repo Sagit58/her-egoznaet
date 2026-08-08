@@ -1,15 +1,41 @@
 import { useEffect, useState } from 'react';
+
 import { api } from './api';
 
 export interface DashboardStats {
   readonly totalOrders: number;
-  readonly totalCustomers: number;
   readonly activeOrders: number;
+  readonly completedOrders: number;
+  readonly cancelledOrders: number;
   readonly totalRevenue: number;
+  readonly paidTotal: number;
+  readonly unpaidTotal: number;
+  readonly totalCustomers: number;
 }
 
+export interface DashboardOrder {
+  readonly id: string;
+  readonly number: number;
+  readonly status: string;
+  readonly totalAmount: number;
+  readonly customer?: {
+    readonly firstName: string;
+    readonly lastName: string;
+  } | null;
+}
+
+interface DashboardData {
+  readonly stats: DashboardStats;
+  readonly recentOrders: ReadonlyArray<DashboardOrder>;
+}
+
+/**
+ * Loads the dashboard aggregate stats (`GET /orders/stats`) plus the five
+ * most recent orders (`GET /orders`) in parallel. Re-runs when `enabled`
+ * flips to true (i.e. once the user is authenticated).
+ */
 export const useDashboardStats = (enabled: boolean) => {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,19 +46,19 @@ export const useDashboardStats = (enabled: boolean) => {
 
     const fetchStats = async () => {
       try {
-        const [ordersResponse, customersResponse] = await Promise.all([
-          api.get('/orders?pageSize=1'),
-          api.get('/customers?pageSize=1'),
-        ]);
+        const [statsResponse, ordersResponse, customersResponse] =
+          await Promise.all([
+            api.get('/orders/stats'),
+            api.get('/orders?pageSize=5&sortBy=createdAt&sortOrder=desc'),
+            api.get('/customers?pageSize=1'),
+          ]);
 
-        const orders = ordersResponse.data;
-        const customers = customersResponse.data;
-
-        setStats({
-          totalOrders: orders.total || 0,
-          totalCustomers: customers.total || 0,
-          activeOrders: orders.total || 0,
-          totalRevenue: 0,
+        setData({
+          stats: {
+            ...statsResponse.data,
+            totalCustomers: customersResponse.data.total || 0,
+          } as DashboardStats,
+          recentOrders: ordersResponse.data.items || [],
         });
         setError(null);
       } catch (err: any) {
@@ -45,5 +71,5 @@ export const useDashboardStats = (enabled: boolean) => {
     fetchStats();
   }, [enabled]);
 
-  return { stats, loading, error };
+  return { data, loading, error };
 };

@@ -1,5 +1,4 @@
 import {
-  LayoutDashboard,
   FileText,
   Users,
   UserCheck,
@@ -8,88 +7,70 @@ import {
   LogOut,
   TrendingUp,
   Clock,
-  AlertCircle,
+  CheckCircle2,
+  Clock3,
   Lock,
+  type LucideIcon,
 } from 'lucide-react';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
 
 import { useDashboardStats } from './hooks';
-import { CustomersScreen } from './screens/CustomersScreen';
-import { EmployeesScreen } from './screens/EmployeesScreen';
-import { OrdersScreen } from './screens/OrdersScreen';
 import { generateInitData } from './telegram';
+import { formatRub, ORDER_STATUS_COLORS, ORDER_STATUS_LABELS } from './constants';
 
-type Screen = 'dashboard' | 'orders' | 'customers' | 'employees' | 'files' | 'branches';
+/**
+ * Login state is shared across the app via this tiny module-scoped store.
+ * Screens render LoginCard directly when the access token is missing, and
+ * AuthGate redirects to /login otherwise.
+ */
+export const isAuthenticated = (): boolean =>
+  localStorage.getItem('accessToken') !== null;
 
-interface MenuItem {
-  readonly id: Screen;
-  readonly label: string;
-  readonly icon: typeof LayoutDashboard;
-  readonly description: string;
-}
+export const storeTokens = (body: { accessToken?: string; refreshToken?: string }) => {
+  if (!body.accessToken) {
+    throw new Error('Сервер не вернул токен');
+  }
 
-const menuItems: MenuItem[] = [
-  {
-    id: 'orders',
-    label: 'Заказы',
-    icon: FileText,
-    description: 'Управление заказами',
-  },
-  {
-    id: 'customers',
-    label: 'Клиенты',
-    icon: Users,
-    description: 'База клиентов',
-  },
-  {
-    id: 'employees',
-    label: 'Сотрудники',
-    icon: UserCheck,
-    description: 'Персонал',
-  },
-  {
-    id: 'files',
-    label: 'Документы',
-    icon: Folder,
-    description: 'Файлы и фото',
-  },
-  {
-    id: 'branches',
-    label: 'Филиалы',
-    icon: Building,
-    description: 'Офисы и отделы',
-  },
-];
+  localStorage.setItem('accessToken', body.accessToken);
 
-export const App = () => {
-  const [authenticated, setAuthenticated] = useState<boolean>(
-    () => localStorage.getItem('accessToken') !== null,
-  );
+  if (body.refreshToken) {
+    localStorage.setItem('refreshToken', body.refreshToken);
+  }
+};
+
+export const clearTokens = () => {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+};
+
+/** Gate that redirects unauthenticated users to the login screen. */
+export const AuthGate = ({ children }: { children: ReactNode }) => {
+  if (!isAuthenticated()) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+/**
+ * Card-based login offering either a password login (superadmin) or a
+ * Telegram login. Outside Telegram, falls back to forging initData from
+ * the dev env vars (see telegram.ts).
+ */
+export const LoginCard = () => {
+  const navigate = useNavigate();
   const [loggingIn, setLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [adminLogin, setAdminLogin] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
-  const [currentScreen, setCurrentScreen] = useState<Screen>('dashboard');
-  const { stats, loading, error } = useDashboardStats(authenticated);
 
-  const completeLogin = (body: {
-    accessToken?: string;
-    refreshToken?: string;
-  }) => {
-    if (!body.accessToken) {
-      throw new Error('Сервер не вернул токен');
-    }
-
-    localStorage.setItem('accessToken', body.accessToken);
-
-    if (body.refreshToken) {
-      localStorage.setItem('refreshToken', body.refreshToken);
-    }
-
-    setAuthenticated(true);
+  const complete = (body: { accessToken?: string; refreshToken?: string }) => {
+    storeTokens(body);
+    navigate('/dashboard', { replace: true });
   };
 
-  const handleLogin = async () => {
+  const handleTelegramLogin = async () => {
     setLoginError(null);
     setLoggingIn(true);
 
@@ -129,9 +110,7 @@ export const App = () => {
         throw new Error(`Ошибка входа: ${response.status}`);
       }
 
-      const body = (await response.json()) as Parameters<typeof completeLogin>[0];
-
-      completeLogin(body);
+      complete((await response.json()) as Parameters<typeof complete>[0]);
     } catch (err: any) {
       setLoginError(err.message || 'Ошибка входа');
     } finally {
@@ -147,19 +126,14 @@ export const App = () => {
       const response = await fetch('/api/v1/auth/password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          login: adminLogin,
-          password: adminPassword,
-        }),
+        body: JSON.stringify({ login: adminLogin, password: adminPassword }),
       });
 
       if (!response.ok) {
         throw new Error(`Ошибка входа: ${response.status}`);
       }
 
-      const body = (await response.json()) as Parameters<typeof completeLogin>[0];
-
-      completeLogin(body);
+      complete((await response.json()) as Parameters<typeof complete>[0]);
     } catch (err: any) {
       setLoginError(err.message || 'Ошибка входа');
     } finally {
@@ -167,123 +141,101 @@ export const App = () => {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    setAuthenticated(false);
-    setCurrentScreen('dashboard');
-  };
-
-  if (!authenticated) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-        <div className="w-full max-w-sm">
-          <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-3 rounded-md bg-slate-700">
-                <Lock className="w-6 h-6 text-slate-300" />
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold text-slate-100">
-                  Monument ERP
-                </h1>
-                <p className="text-sm text-slate-400">Вход в систему</p>
-              </div>
+  return (
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+      <div className="w-full max-w-sm">
+        <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-3 rounded-md bg-slate-700">
+              <Lock className="w-6 h-6 text-slate-300" />
             </div>
-
-            {loginError && (
-              <div className="bg-red-900/20 rounded-lg p-3 border border-red-800 mb-4">
-                <p className="text-red-400 text-sm">{loginError}</p>
-              </div>
-            )}
-
-            <div className="space-y-3 mb-4">
-              <input
-                value={adminLogin}
-                onChange={(event) => setAdminLogin(event.target.value)}
-                autoComplete="username"
-                placeholder="Логин"
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-3 text-slate-100 placeholder:text-slate-500 outline-none focus:border-blue-500"
-              />
-              <input
-                value={adminPassword}
-                onChange={(event) => setAdminPassword(event.target.value)}
-                autoComplete="current-password"
-                placeholder="Пароль"
-                type="password"
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-3 text-slate-100 placeholder:text-slate-500 outline-none focus:border-blue-500"
-              />
-              <button
-                onClick={handlePasswordLogin}
-                disabled={loggingIn}
-                className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium rounded-lg p-3 transition-colors"
-              >
-                {loggingIn ? 'Вход...' : 'Войти по логину'}
-              </button>
+            <div>
+              <h1 className="text-xl font-semibold text-slate-100">
+                Monument ERP
+              </h1>
+              <p className="text-sm text-slate-400">Вход в систему</p>
             </div>
+          </div>
 
+          {loginError && (
+            <div className="bg-red-900/20 rounded-lg p-3 border border-red-800 mb-4">
+              <p className="text-red-400 text-sm">{loginError}</p>
+            </div>
+          )}
+
+          <div className="space-y-3 mb-4">
+            <input
+              value={adminLogin}
+              onChange={(e) => setAdminLogin(e.target.value)}
+              autoComplete="username"
+              placeholder="Логин"
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-3 text-slate-100 placeholder:text-slate-500 outline-none focus:border-blue-500"
+            />
+            <input
+              value={adminPassword}
+              onChange={(e) => setAdminPassword(e.target.value)}
+              autoComplete="current-password"
+              placeholder="Пароль"
+              type="password"
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-3 text-slate-100 placeholder:text-slate-500 outline-none focus:border-blue-500"
+            />
             <button
-              onClick={handleLogin}
+              onClick={handlePasswordLogin}
               disabled={loggingIn}
-              className="w-full bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white font-medium rounded-lg p-3 transition-colors"
+              className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium rounded-lg p-3 transition-colors"
             >
-              {loggingIn ? 'Вход...' : 'Войти через Telegram'}
+              {loggingIn ? 'Вход...' : 'Войти по логину'}
             </button>
           </div>
+
+          <button
+            onClick={handleTelegramLogin}
+            disabled={loggingIn}
+            className="w-full bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white font-medium rounded-lg p-3 transition-colors"
+          >
+            {loggingIn ? 'Вход...' : 'Войти через Telegram'}
+          </button>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
+};
 
-  if (currentScreen === 'orders') {
-    return <OrdersScreen onBack={() => setCurrentScreen('dashboard')} />;
-  }
+export interface MenuItem {
+  readonly id: string;
+  readonly label: string;
+  readonly icon: LucideIcon;
+  readonly description: string;
+  readonly to: string;
+}
 
-  
-    if (currentScreen === 'employees') {
-    return <EmployeesScreen onBack={() => setCurrentScreen('dashboard')} />;
-  }
-  if (currentScreen === 'customers') {
-    return <CustomersScreen onBack={() => setCurrentScreen('dashboard')} />;
-  }
+const menuItems: MenuItem[] = [
+  { id: 'orders', label: 'Заказы', icon: FileText, description: 'Управление заказами', to: '/orders' },
+  { id: 'customers', label: 'Клиенты', icon: Users, description: 'База клиентов', to: '/customers' },
+  { id: 'employees', label: 'Сотрудники', icon: UserCheck, description: 'Персонал', to: '/employees' },
+  { id: 'files', label: 'Документы', icon: Folder, description: 'Файлы и фото', to: '/files' },
+  { id: 'branches', label: 'Филиалы', icon: Building, description: 'Офисы и отделы', to: '/branches' },
+];
 
-  if (currentScreen !== 'dashboard') {
-    const currentMenuItem = menuItems.find((m) => m.id === currentScreen);
-    const CurrentIcon = currentMenuItem?.icon || LayoutDashboard;
+export const Dashboard = () => {
+  const navigate = useNavigate();
+  const { data, loading, error } = useDashboardStats(true);
 
-    return (
-      <div className="min-h-screen bg-slate-900 p-4 pb-20">
-        <button
-          onClick={() => setCurrentScreen('dashboard')}
-          className="mb-4 flex items-center gap-2 text-slate-400 hover:text-slate-300 transition-colors text-sm"
-        >
-          ← Назад
-        </button>
-        <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 rounded-md bg-slate-800 border border-slate-700">
-            <CurrentIcon className="w-5 h-5 text-slate-300" />
-          </div>
-          <h1 className="text-lg font-semibold text-slate-100">
-            {currentMenuItem?.label}
-          </h1>
-        </div>
-        <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
-          <div className="flex items-center gap-3 text-slate-400">
-            <AlertCircle className="w-5 h-5" />
-            <p className="text-sm">
-              Раздел "{currentMenuItem?.label}" в разработке
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleLogout = () => {
+    clearTokens();
+    navigate('/login', { replace: true });
+  };
+
+  const stats = data?.stats;
 
   const statCards = [
     { label: 'Всего заказов', value: stats?.totalOrders ?? '-', icon: FileText },
     { label: 'Клиентов', value: stats?.totalCustomers ?? '-', icon: Users },
-    { label: 'Активных', value: stats?.activeOrders ?? '-', icon: Clock },
-    { label: 'Выручка', value: stats?.totalRevenue ?? '-', icon: TrendingUp },
+    { label: 'В работе', value: stats?.activeOrders ?? '-', icon: Clock },
+    { label: 'Завершено', value: stats?.completedOrders ?? '-', icon: CheckCircle2 },
+    { label: 'Выручка', value: stats ? formatRub(stats.totalRevenue) : '-', icon: TrendingUp, wide: true },
+    { label: 'Оплачено', value: stats ? formatRub(stats.paidTotal) : '-', icon: CheckCircle2 },
+    { label: 'Долг', value: stats ? formatRub(stats.unpaidTotal) : '-', icon: Clock3 },
   ];
 
   return (
@@ -298,6 +250,7 @@ export const App = () => {
         <button
           onClick={handleLogout}
           className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700"
+          aria-label="Выйти"
         >
           <LogOut className="w-4 h-4 text-slate-400" />
         </button>
@@ -315,23 +268,67 @@ export const App = () => {
         </div>
       )}
 
-      {!loading && !error && (
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          {statCards.map((stat) => (
-            <div
-              key={stat.label}
-              className="bg-slate-800 rounded-lg p-4 border border-slate-700"
-            >
-              <div className="flex items-start justify-between mb-2">
-                <stat.icon className="w-5 h-5 text-slate-400" />
+      {!loading && !error && stats && (
+        <>
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            {statCards.map((stat) => (
+              <div
+                key={stat.label}
+                className={`bg-slate-800 rounded-lg p-4 border border-slate-700 ${
+                  (stat as { wide?: boolean }).wide ? 'col-span-2' : ''
+                }`}
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <stat.icon className="w-5 h-5 text-slate-400" />
+                </div>
+                <div className="text-2xl font-semibold text-slate-100 mb-1">
+                  {stat.value}
+                </div>
+                <div className="text-xs text-slate-400">{stat.label}</div>
               </div>
-              <div className="text-2xl font-semibold text-slate-100 mb-1">
-                {stat.value}
+            ))}
+          </div>
+
+          {/* Последние заказы */}
+          {data?.recentOrders && data.recentOrders.length > 0 && (
+            <div className="mb-6">
+              <h2 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">
+                Последние заказы
+              </h2>
+              <div className="space-y-2">
+                {data.recentOrders.map((order) => (
+                  <button
+                    key={order.id}
+                    onClick={() => navigate(`/orders/${order.id}`)}
+                    className="w-full bg-slate-800 rounded-lg p-4 border border-slate-700 text-left hover:bg-slate-700 transition-colors"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="font-medium text-slate-100">№ {order.number}</div>
+                      <span
+                        className={`text-xs px-2 py-1 rounded border ${
+                          ORDER_STATUS_COLORS[order.status] ||
+                          'bg-slate-700 text-slate-300 border-slate-600'
+                        }`}
+                      >
+                        {ORDER_STATUS_LABELS[order.status] || order.status}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="text-slate-400">
+                        {order.customer
+                          ? `${order.customer.lastName} ${order.customer.firstName}`
+                          : 'Без клиента'}
+                      </div>
+                      <div className="text-slate-200 font-medium">
+                        {formatRub(order.totalAmount || 0)}
+                      </div>
+                    </div>
+                  </button>
+                ))}
               </div>
-              <div className="text-xs text-slate-400">{stat.label}</div>
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
 
       <h2 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">
@@ -341,7 +338,7 @@ export const App = () => {
         {menuItems.map((item) => (
           <button
             key={item.id}
-            onClick={() => setCurrentScreen(item.id)}
+            onClick={() => navigate(item.to)}
             className="w-full bg-slate-800 hover:bg-slate-700 rounded-lg p-4 border border-slate-700 transition-colors text-left flex items-center gap-3"
           >
             <div className="p-2 rounded-md bg-slate-700">

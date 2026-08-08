@@ -66,4 +66,5 @@ export const orderListQuerySchema = listQuerySchema.extend({
   status: z.enum(ORDER_STATUSES).optional(),
   customerId: z.string().uuid().optional(),
   managerId: z.string().uuid().optional(),
+  assignedTo: z.string().uuid().optional(),
 });

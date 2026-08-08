@@ -1,7 +1,9 @@
-import { ArrowLeft, Plus, RefreshCw, Users, X } from 'lucide-react';
+import { Plus, RefreshCw, Search, Users, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { api } from '../api';
+import { EmptyState, ScreenLayout } from '../components';
 
 interface Customer {
   readonly id: string;
@@ -11,7 +13,8 @@ interface Customer {
   readonly phone: string;
 }
 
-export const CustomersScreen = ({ onBack }: { onBack: () => void }) => {
+export const CustomersScreen = () => {
+  const navigate = useNavigate();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,13 +25,20 @@ export const CustomersScreen = ({ onBack }: { onBack: () => void }) => {
   const [lastName, setLastName] = useState('');
   const [firstName, setFirstName] = useState('');
   const [phone, setPhone] = useState('');
+  const [search, setSearch] = useState('');
 
   const loadCustomers = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await api.get('/customers?pageSize=100');
+      const params = new URLSearchParams({ pageSize: '100' });
+
+      if (search.trim()) {
+        params.set('search', search.trim());
+      }
+
+      const response = await api.get(`/customers?${params.toString()}`);
       setCustomers(response.data.items || []);
     } catch (err: any) {
       setError(err.message || 'Ошибка загрузки');
@@ -37,9 +47,12 @@ export const CustomersScreen = ({ onBack }: { onBack: () => void }) => {
     }
   };
 
+  // Перезагружаем при изменении поиска (с debounce)
   useEffect(() => {
-    loadCustomers();
-  }, []);
+    const timer = setTimeout(loadCustomers, 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   const handleCreate = async () => {
     if (!lastName || !firstName || !phone) {
@@ -66,38 +79,23 @@ export const CustomersScreen = ({ onBack }: { onBack: () => void }) => {
     }
   };
 
+  const actions = [
+    {
+      icon: showForm ? <X className="w-4 h-4 text-white" /> : <Plus className="w-4 h-4 text-white" />,
+      onClick: () => setShowForm(!showForm),
+      variant: 'primary' as const,
+      label: showForm ? 'Закрыть форму' : 'Добавить клиента',
+    },
+    {
+      icon: <RefreshCw className="w-4 h-4 text-slate-400" />,
+      onClick: loadCustomers,
+      variant: 'ghost' as const,
+      label: 'Обновить',
+    },
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-900 p-4 pb-20">
-      <div className="flex items-center justify-between mb-4">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 text-slate-400 hover:text-slate-300 transition-colors text-sm"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Назад
-        </button>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="p-2 rounded-lg bg-blue-600 hover:bg-blue-500"
-          >
-            {showForm ? (
-              <X className="w-4 h-4 text-white" />
-            ) : (
-              <Plus className="w-4 h-4 text-white" />
-            )}
-          </button>
-          <button
-            onClick={loadCustomers}
-            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700"
-          >
-            <RefreshCw className="w-4 h-4 text-slate-400" />
-          </button>
-        </div>
-      </div>
-
-      <h1 className="text-lg font-semibold text-slate-100 mb-4">Клиенты</h1>
-
+    <ScreenLayout title="Клиенты" onBack={() => navigate('/dashboard')} actions={actions}>
       {showForm && (
         <div className="bg-slate-800 rounded-lg p-4 border border-slate-700 mb-4 space-y-3">
           <div>
@@ -109,7 +107,6 @@ export const CustomersScreen = ({ onBack }: { onBack: () => void }) => {
               className="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm text-slate-100"
             />
           </div>
-
           <div>
             <label className="text-xs text-slate-400 mb-1 block">Имя</label>
             <input
@@ -119,7 +116,6 @@ export const CustomersScreen = ({ onBack }: { onBack: () => void }) => {
               className="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm text-slate-100"
             />
           </div>
-
           <div>
             <label className="text-xs text-slate-400 mb-1 block">Телефон</label>
             <input
@@ -129,9 +125,7 @@ export const CustomersScreen = ({ onBack }: { onBack: () => void }) => {
               className="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm text-slate-100"
             />
           </div>
-
           {formError && <p className="text-red-400 text-sm">{formError}</p>}
-
           <button
             onClick={handleCreate}
             disabled={saving}
@@ -141,6 +135,17 @@ export const CustomersScreen = ({ onBack }: { onBack: () => void }) => {
           </button>
         </div>
       )}
+
+      {/* Поиск */}
+      <div className="relative mb-4">
+        <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Поиск по имени..."
+          className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500"
+        />
+      </div>
 
       {loading && (
         <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
@@ -155,27 +160,26 @@ export const CustomersScreen = ({ onBack }: { onBack: () => void }) => {
       )}
 
       {!loading && !error && customers.length === 0 && (
-        <div className="bg-slate-800 rounded-lg p-6 border border-slate-700 text-center">
-          <Users className="w-8 h-8 text-slate-500 mx-auto mb-2" />
-          <p className="text-slate-400 text-sm">Клиентов пока нет</p>
-        </div>
+        <EmptyState icon={Users} title="Клиентов пока нет" />
       )}
 
       {!loading && !error && customers.length > 0 && (
         <div className="space-y-2">
           {customers.map((customer) => (
-            <div
+            <button
               key={customer.id}
-              className="bg-slate-800 rounded-lg p-4 border border-slate-700"
+              onClick={() => navigate(`/customers/${customer.id}`)}
+              className="w-full bg-slate-800 rounded-lg p-4 border border-slate-700 text-left hover:bg-slate-700 transition-colors"
             >
               <div className="font-medium text-slate-100 mb-1">
                 {customer.lastName} {customer.firstName}
+                {customer.middleName ? ` ${customer.middleName}` : ''}
               </div>
               <div className="text-sm text-slate-400">{customer.phone}</div>
-            </div>
+            </button>
           ))}
         </div>
       )}
-    </div>
+    </ScreenLayout>
   );
 };

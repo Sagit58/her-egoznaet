@@ -47,6 +47,12 @@ export const registerOrderRoutes = (
   );
 
   app.get(
+    '/api/v1/orders/stats',
+    { preHandler: guard.requirePermission('order.list') },
+    async () => service.getStats(),
+  );
+
+  app.get(
     '/api/v1/orders',
     { preHandler: guard.requirePermission('order.list') },
     async (request) => {
@@ -68,6 +74,7 @@ export const registerOrderRoutes = (
         status: query.status,
         customerId: query.customerId,
         managerId: query.managerId,
+        assignedTo: query.assignedTo,
         sortBy: query.sortBy,
         sortOrder: query.sortOrder,
       });
@@ -152,7 +159,7 @@ export const registerOrderRoutes = (
 
   app.patch(
     '/api/v1/orders/:id/stages/:type',
-    { preHandler: guard.requirePermission('order.change-status') },
+    { preHandler: guard.requireStagePermission() },
     async (request) => {
       const params = orderStageParamSchema.safeParse(request.params);
 

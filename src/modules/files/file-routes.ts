@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type { Multipart } from '@fastify/multipart';
 
 import type { AuthGuard } from '../../common/auth/auth-guard';
 import { AppError } from '../../common/errors/app-error';
@@ -8,6 +9,24 @@ import {
   fileListQuerySchema,
 } from './file.schemas';
 import type { FileService } from './file-service';
+
+/**
+ * Extract a scalar string value from a multipart field, which may be a single
+ * {@link Multipart} value or an array of values.
+ */
+const scalar = (field: Multipart | Multipart[] | undefined): unknown => {
+  if (!field) {
+    return undefined;
+  }
+
+  if (Array.isArray(field)) {
+    const [first] = field;
+
+    return first && 'value' in first ? first.value : undefined;
+  }
+
+  return 'value' in field ? field.value : undefined;
+};
 
 export const registerFileRoutes = (
   app: FastifyInstance,
@@ -25,9 +44,9 @@ export const registerFileRoutes = (
       }
 
       const fields = fileFieldsSchema.safeParse({
-        category: data.fields.category?.value,
-        orderId: data.fields.orderId?.value,
-        customerId: data.fields.customerId?.value,
+        category: scalar(data.fields['category']),
+        orderId: scalar(data.fields['orderId']),
+        customerId: scalar(data.fields['customerId']),
       });
 
       if (!fields.success) {

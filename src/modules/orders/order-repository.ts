@@ -12,7 +12,13 @@ const orderInclude = {
     select: { id: true, firstName: true, lastName: true, phone: true },
   },
   graveSite: {
-    select: { id: true, name: true, address: true },
+    select: {
+      id: true,
+      name: true,
+      address: true,
+      latitude: true,
+      longitude: true,
+    },
   },
   manager: {
     select: { id: true, firstName: true, lastName: true },
@@ -57,6 +63,7 @@ export interface OrderListArgs {
   readonly status?: OrderStatus;
   readonly customerId?: string;
   readonly managerId?: string;
+  readonly assignedTo?: string;
   readonly sortBy?: 'createdAt' | 'number' | 'totalAmount';
   readonly sortOrder?: 'asc' | 'desc';
 }
@@ -73,6 +80,16 @@ export interface PaymentInput {
   readonly amount: number;
   readonly method: string;
   readonly comment?: string | null;
+}
+
+export interface OrderStats {
+  readonly totalOrders: number;
+  readonly activeOrders: number;
+  readonly completedOrders: number;
+  readonly cancelledOrders: number;
+  readonly totalRevenue: number;
+  readonly paidTotal: number;
+  readonly unpaidTotal: number;
 }
 
 export class OrderRepository {
@@ -229,6 +246,9 @@ export class OrderRepository {
       status: args.status,
       customerId: args.customerId,
       managerId: args.managerId,
+      ...(args.assignedTo
+        ? { stages: { some: { assignedEmployeeId: args.assignedTo } } }
+        : {}),
       ...(searchFilters.length > 0 ? { OR: searchFilters } : {}),
     };
 
@@ -254,5 +274,41 @@ export class OrderRepository {
     ]);
 
     return buildPaginated(items, total, page);
+  }
+
+  async getStats(): Promise<OrderStats> {
+    const [totalOrders, byStatus, paidAggregate] = await Promise.all([
+      prisma.order.count({ where: { deletedAt: null } }),
+      prisma.order.groupBy({
+        by: ['status'],
+        where: { deletedAt: null },
+        _count: true,
+        _sum: { totalAmount: true },
+      }),
+      prisma.payment.aggregate({
+        where: { deletedAt: null },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    const statusCounts = new Map<string, number>();
+    let revenueTotal = 0;
+
+    for (const row of byStatus) {
+      statusCounts.set(row.status, row._count);
+      revenueTotal += Number(row._sum.totalAmount ?? 0);
+    }
+
+    const paidTotal = Number(paidAggregate._sum.amount ?? 0);
+
+    return {
+      totalOrders,
+      activeOrders: statusCounts.get('IN_PROGRESS') ?? 0,
+      completedOrders: statusCounts.get('COMPLETED') ?? 0,
+      cancelledOrders: statusCounts.get('CANCELLED') ?? 0,
+      totalRevenue: revenueTotal,
+      paidTotal,
+      unpaidTotal: Math.max(revenueTotal - paidTotal, 0),
+    };
   }
 }

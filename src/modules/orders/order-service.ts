@@ -5,6 +5,7 @@ import type { Paginated } from '../../common/pagination/pagination.types';
 import type {
   OrderListArgs,
   OrderRecord,
+  OrderStats,
   OrderUpdateInput,
   OrderWriteInput,
   PaymentInput,
@@ -177,6 +178,10 @@ export class OrderService {
     const result = await this.repository.list(args);
 
     return { ...result, items: result.items.map(toDto) };
+  }
+
+  async getStats(): Promise<OrderStats> {
+    return this.repository.getStats();
   }
 
   async changeStatus(id: string, status: OrderStatus): Promise<OrderDto> {

@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import jwt, { type SignOptions } from 'jsonwebtoken';
 import { z } from 'zod';
 
 import { AppError } from '../../common/errors/app-error';
@@ -47,7 +47,7 @@ export class JwtService {
         type: 'access',
       },
       env.JWT_ACCESS_SECRET,
-      { expiresIn: env.JWT_ACCESS_EXPIRES_IN },
+      { expiresIn: env.JWT_ACCESS_EXPIRES_IN } as SignOptions,
     );
   }
 
@@ -62,7 +62,7 @@ export class JwtService {
         type: 'refresh',
       },
       env.JWT_REFRESH_SECRET,
-      { expiresIn: env.JWT_REFRESH_EXPIRES_IN },
+      { expiresIn: env.JWT_REFRESH_EXPIRES_IN } as SignOptions,
     );
   }
 

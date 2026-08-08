@@ -1,8 +1,15 @@
-import { ArrowLeft, FileText, MapPin, Plus, RefreshCw, X } from 'lucide-react';
+import { FileText, Plus, RefreshCw, Search, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { api } from '../api';
-import { OrderDetailScreen } from './OrderDetailScreen';
+import { EmptyState, ScreenLayout, StatusBadge } from '../components';
+import {
+  ORDER_STATUSES,
+  ORDER_STATUS_COLORS,
+  ORDER_STATUS_LABELS,
+  formatRub,
+} from '../constants';
 
 interface OrderCustomer {
   readonly firstName: string;
@@ -14,6 +21,7 @@ interface Order {
   readonly number: number;
   readonly status: string;
   readonly totalAmount: number;
+  readonly paidAmount?: number;
   readonly customer?: OrderCustomer | null;
 }
 
@@ -23,21 +31,16 @@ interface CustomerOption {
   readonly lastName: string;
 }
 
-const statusLabels: Record<string, string> = {
-  NEW: 'Новый',
-  IN_PROGRESS: 'В работе',
-  COMPLETED: 'Завершён',
-  CANCELLED: 'Отменён',
+type SortField = 'createdAt' | 'number' | 'totalAmount';
+
+const SORT_LABELS: Record<SortField, string> = {
+  createdAt: 'По дате',
+  number: 'По номеру',
+  totalAmount: 'По сумме',
 };
 
-const statusColors: Record<string, string> = {
-  NEW: 'bg-blue-900/40 text-blue-300 border-blue-800',
-  IN_PROGRESS: 'bg-orange-900/40 text-orange-300 border-orange-800',
-  COMPLETED: 'bg-emerald-900/40 text-emerald-300 border-emerald-800',
-  CANCELLED: 'bg-red-900/40 text-red-300 border-red-800',
-};
-
-export const OrdersScreen = ({ onBack }: { onBack: () => void }) => {
+export const OrdersScreen = () => {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,7 +48,6 @@ export const OrdersScreen = ({ onBack }: { onBack: () => void }) => {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   const [orderNumber, setOrderNumber] = useState('');
   const [customerId, setCustomerId] = useState('');
@@ -57,13 +59,30 @@ export const OrdersScreen = ({ onBack }: { onBack: () => void }) => {
   const [detecting, setDetecting] = useState(false);
   const [photos, setPhotos] = useState<File[]>([]);
 
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [sortBy, setSortBy] = useState<SortField>('createdAt');
+
   const loadData = async () => {
     setLoading(true);
     setError(null);
 
     try {
+      const params = new URLSearchParams({ pageSize: '100' });
+
+      if (search.trim()) {
+        params.set('search', search.trim());
+      }
+
+      if (statusFilter) {
+        params.set('status', statusFilter);
+      }
+
+      params.set('sortBy', sortBy);
+      params.set('sortOrder', 'desc');
+
       const [ordersResponse, customersResponse] = await Promise.all([
-        api.get('/orders?pageSize=50'),
+        api.get(`/orders?${params.toString()}`),
         api.get('/customers?pageSize=100'),
       ]);
 
@@ -76,9 +95,12 @@ export const OrdersScreen = ({ onBack }: { onBack: () => void }) => {
     }
   };
 
+  // Перезагружаем при изменении фильтров/поиска/сортировки
   useEffect(() => {
-    loadData();
-  }, []);
+    const timer = setTimeout(loadData, 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, statusFilter, sortBy]);
 
   const detectLocation = () => {
     if (!navigator.geolocation) {
@@ -196,62 +218,35 @@ export const OrdersScreen = ({ onBack }: { onBack: () => void }) => {
     }
   };
 
-  if (selectedOrderId) {
-    return (
-      <OrderDetailScreen
-        orderId={selectedOrderId}
-        onBack={() => setSelectedOrderId(null)}
-      />
-    );
-  }
+  const actions = [
+    {
+      icon: showForm ? <X className="w-4 h-4 text-white" /> : <Plus className="w-4 h-4 text-white" />,
+      onClick: () => setShowForm(!showForm),
+      variant: 'primary' as const,
+      label: showForm ? 'Закрыть форму' : 'Создать заказ',
+    },
+    {
+      icon: <RefreshCw className="w-4 h-4 text-slate-400" />,
+      onClick: loadData,
+      variant: 'ghost' as const,
+      label: 'Обновить',
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-slate-900 p-4 pb-20">
-      <div className="flex items-center justify-between mb-4">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 text-slate-400 hover:text-slate-300 transition-colors text-sm"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Назад
-        </button>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="p-2 rounded-lg bg-blue-600 hover:bg-blue-500"
-          >
-            {showForm ? (
-              <X className="w-4 h-4 text-white" />
-            ) : (
-              <Plus className="w-4 h-4 text-white" />
-            )}
-          </button>
-          <button
-            onClick={loadData}
-            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700"
-          >
-            <RefreshCw className="w-4 h-4 text-slate-400" />
-          </button>
-        </div>
-      </div>
-
-      <h1 className="text-lg font-semibold text-slate-100 mb-4">Заказы</h1>
-
+    <ScreenLayout title="Заказы" onBack={() => navigate('/dashboard')} actions={actions}>
       {showForm && (
         <div className="bg-slate-800 rounded-lg p-4 border border-slate-700 mb-4 space-y-3">
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">
-              Номер заказа
-            </label>
+            <label className="text-xs text-slate-400 mb-1 block">Номер заказа</label>
             <input
               type="number"
               value={orderNumber}
               onChange={(e) => setOrderNumber(e.target.value)}
-              placeholder="1"
+              placeholder="авто, если пусто"
               className="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm text-slate-100"
             />
           </div>
-
           <div>
             <label className="text-xs text-slate-400 mb-1 block">Клиент</label>
             <select
@@ -267,11 +262,8 @@ export const OrdersScreen = ({ onBack }: { onBack: () => void }) => {
               ))}
             </select>
           </div>
-
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">
-              Сумма (₽)
-            </label>
+            <label className="text-xs text-slate-400 mb-1 block">Сумма (₽)</label>
             <input
               type="number"
               value={amount}
@@ -280,11 +272,8 @@ export const OrdersScreen = ({ onBack }: { onBack: () => void }) => {
               className="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm text-slate-100"
             />
           </div>
-
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">
-              Адрес места
-            </label>
+            <label className="text-xs text-slate-400 mb-1 block">Адрес места</label>
             <div className="flex gap-2">
               <input
                 value={address}
@@ -295,9 +284,10 @@ export const OrdersScreen = ({ onBack }: { onBack: () => void }) => {
               <button
                 onClick={detectLocation}
                 disabled={detecting}
-                className="p-3 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600"
+                className="p-3 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600 disabled:opacity-50"
+                aria-label="Определить геолокацию"
               >
-                <MapPin className="w-4 h-4 text-blue-400" />
+                📍
               </button>
             </div>
             {latitude !== null && longitude !== null && (
@@ -306,11 +296,8 @@ export const OrdersScreen = ({ onBack }: { onBack: () => void }) => {
               </p>
             )}
           </div>
-
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">
-              Фотографии
-            </label>
+            <label className="text-xs text-slate-400 mb-1 block">Фотографии</label>
             <input
               type="file"
               accept="image/*"
@@ -319,16 +306,11 @@ export const OrdersScreen = ({ onBack }: { onBack: () => void }) => {
               className="w-full text-sm text-slate-300"
             />
             {photos.length > 0 && (
-              <p className="text-xs text-slate-400 mt-1">
-                Выбрано файлов: {photos.length}
-              </p>
+              <p className="text-xs text-slate-400 mt-1">Выбрано файлов: {photos.length}</p>
             )}
           </div>
-
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">
-              Комментарий
-            </label>
+            <label className="text-xs text-slate-400 mb-1 block">Комментарий</label>
             <input
               value={comment}
               onChange={(e) => setComment(e.target.value)}
@@ -336,9 +318,7 @@ export const OrdersScreen = ({ onBack }: { onBack: () => void }) => {
               className="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm text-slate-100"
             />
           </div>
-
           {formError && <p className="text-red-400 text-sm">{formError}</p>}
-
           <button
             onClick={handleCreate}
             disabled={saving}
@@ -348,6 +328,61 @@ export const OrdersScreen = ({ onBack }: { onBack: () => void }) => {
           </button>
         </div>
       )}
+
+      {/* Поиск */}
+      <div className="relative mb-3">
+        <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Поиск по номеру или клиенту..."
+          className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500"
+        />
+      </div>
+
+      {/* Фильтр по статусу */}
+      <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+        <button
+          onClick={() => setStatusFilter('')}
+          className={`px-3 py-1.5 text-xs rounded-full whitespace-nowrap transition-colors ${
+            !statusFilter
+              ? 'bg-blue-600 text-white'
+              : 'bg-slate-800 text-slate-400 border border-slate-700'
+          }`}
+        >
+          Все
+        </button>
+        {ORDER_STATUSES.map((status) => (
+          <button
+            key={status}
+            onClick={() => setStatusFilter(status)}
+            className={`px-3 py-1.5 text-xs rounded-full whitespace-nowrap transition-colors ${
+              statusFilter === status
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-800 text-slate-400 border border-slate-700'
+            }`}
+          >
+            {ORDER_STATUS_LABELS[status]}
+          </button>
+        ))}
+      </div>
+
+      {/* Сортировка */}
+      <div className="flex gap-2 mb-4">
+        {Object.entries(SORT_LABELS).map(([value, label]) => (
+          <button
+            key={value}
+            onClick={() => setSortBy(value as SortField)}
+            className={`px-3 py-1 text-xs rounded-lg transition-colors ${
+              sortBy === value
+                ? 'bg-slate-700 text-slate-100'
+                : 'text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
       {loading && (
         <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
@@ -362,47 +397,50 @@ export const OrdersScreen = ({ onBack }: { onBack: () => void }) => {
       )}
 
       {!loading && !error && orders.length === 0 && (
-        <div className="bg-slate-800 rounded-lg p-6 border border-slate-700 text-center">
-          <FileText className="w-8 h-8 text-slate-500 mx-auto mb-2" />
-          <p className="text-slate-400 text-sm">Заказов пока нет</p>
-        </div>
+        <EmptyState icon={FileText} title="Заказов пока нет" hint="Нажмите «+», чтобы создать" />
       )}
 
       {!loading && !error && orders.length > 0 && (
         <div className="space-y-2">
-          {orders.map((order) => (
-            <button
-              key={order.id}
-              onClick={() => setSelectedOrderId(order.id)}
-              className="w-full bg-slate-800 rounded-lg p-4 border border-slate-700 text-left hover:bg-slate-700 transition-colors"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="font-medium text-slate-100">
-                  № {order.number}
+          {orders.map((order) => {
+            const paid = order.paidAmount ?? 0;
+            const hasDebt = order.totalAmount > paid && order.status !== 'CANCELLED';
+
+            return (
+              <button
+                key={order.id}
+                onClick={() => navigate(`/orders/${order.id}`)}
+                className="w-full bg-slate-800 rounded-lg p-4 border border-slate-700 text-left hover:bg-slate-700 transition-colors"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="font-medium text-slate-100">№ {order.number}</div>
+                  <StatusBadge
+                    label={ORDER_STATUS_LABELS[order.status] || order.status}
+                    className={ORDER_STATUS_COLORS[order.status]}
+                  />
                 </div>
-                <span
-                  className={`text-xs px-2 py-1 rounded border ${
-                    statusColors[order.status] ||
-                    'bg-slate-700 text-slate-300 border-slate-600'
-                  }`}
-                >
-                  {statusLabels[order.status] || order.status}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-slate-400">
-                  {order.customer
-                    ? `${order.customer.lastName} ${order.customer.firstName}`
-                    : 'Без клиента'}
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-slate-400">
+                    {order.customer
+                      ? `${order.customer.lastName} ${order.customer.firstName}`
+                      : 'Без клиента'}
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-medium text-slate-200">
+                      {formatRub(order.totalAmount || 0)}
+                    </div>
+                    {hasDebt && (
+                      <div className="text-xs text-orange-400">
+                        долг {formatRub(order.totalAmount - paid)}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="text-sm font-medium text-slate-200">
-                  {(order.totalAmount || 0).toLocaleString('ru-RU')} ₽
-                </div>
-              </div>
-            </button>
-          ))}
+              </button>
+            );
+          })}
         </div>
       )}
-    </div>
+    </ScreenLayout>
   );
 };
