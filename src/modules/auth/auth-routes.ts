@@ -9,6 +9,11 @@ const loginBodySchema = z.object({
   initData: z.string().min(1),
 });
 
+const passwordLoginBodySchema = z.object({
+  login: z.string().min(1),
+  password: z.string().min(1),
+});
+
 const refreshBodySchema = z.object({
   refreshToken: z.string().min(1),
 });
@@ -29,6 +34,24 @@ export const registerAuthRoutes = (
     }
 
     const tokens = await authService.loginByTelegram(parsed.data.initData);
+
+    return reply.status(200).send(tokens);
+  });
+
+  app.post('/api/v1/auth/password', async (request, reply) => {
+    const parsed = passwordLoginBodySchema.safeParse(request.body);
+
+    if (!parsed.success) {
+      throw AppError.badRequest(
+        'Invalid request body',
+        parsed.error.flatten().fieldErrors,
+      );
+    }
+
+    const tokens = await authService.loginByPassword(
+      parsed.data.login,
+      parsed.data.password,
+    );
 
     return reply.status(200).send(tokens);
   });

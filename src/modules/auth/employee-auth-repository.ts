@@ -37,4 +37,25 @@ export class EmployeeAuthRepository {
       select: employeeSelect,
     });
   }
+
+  async upsertSuperAdmin(id: string): Promise<EmployeeAuthRecord> {
+    return prisma.employee.upsert({
+      where: { id },
+      update: {
+        firstName: 'Super',
+        lastName: 'Admin',
+        role: 'ADMINISTRATOR',
+        isActive: true,
+        deletedAt: null,
+      },
+      create: {
+        id,
+        firstName: 'Super',
+        lastName: 'Admin',
+        role: 'ADMINISTRATOR',
+        isActive: true,
+      },
+      select: employeeSelect,
+    });
+  }
 }

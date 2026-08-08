@@ -67,8 +67,27 @@ export const App = () => {
   );
   const [loggingIn, setLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [adminLogin, setAdminLogin] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
   const [currentScreen, setCurrentScreen] = useState<Screen>('dashboard');
   const { stats, loading, error } = useDashboardStats(authenticated);
+
+  const completeLogin = (body: {
+    accessToken?: string;
+    refreshToken?: string;
+  }) => {
+    if (!body.accessToken) {
+      throw new Error('Сервер не вернул токен');
+    }
+
+    localStorage.setItem('accessToken', body.accessToken);
+
+    if (body.refreshToken) {
+      localStorage.setItem('refreshToken', body.refreshToken);
+    }
+
+    setAuthenticated(true);
+  };
 
   const handleLogin = async () => {
     setLoginError(null);
@@ -110,22 +129,37 @@ export const App = () => {
         throw new Error(`Ошибка входа: ${response.status}`);
       }
 
-      const body = (await response.json()) as {
-        accessToken?: string;
-        refreshToken?: string;
-      };
+      const body = (await response.json()) as Parameters<typeof completeLogin>[0];
 
-      if (!body.accessToken) {
-        throw new Error('Сервер не вернул токен');
+      completeLogin(body);
+    } catch (err: any) {
+      setLoginError(err.message || 'Ошибка входа');
+    } finally {
+      setLoggingIn(false);
+    }
+  };
+
+  const handlePasswordLogin = async () => {
+    setLoginError(null);
+    setLoggingIn(true);
+
+    try {
+      const response = await fetch('/api/v1/auth/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          login: adminLogin,
+          password: adminPassword,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ошибка входа: ${response.status}`);
       }
 
-      localStorage.setItem('accessToken', body.accessToken);
+      const body = (await response.json()) as Parameters<typeof completeLogin>[0];
 
-      if (body.refreshToken) {
-        localStorage.setItem('refreshToken', body.refreshToken);
-      }
-
-      setAuthenticated(true);
+      completeLogin(body);
     } catch (err: any) {
       setLoginError(err.message || 'Ошибка входа');
     } finally {
@@ -163,12 +197,37 @@ export const App = () => {
               </div>
             )}
 
+            <div className="space-y-3 mb-4">
+              <input
+                value={adminLogin}
+                onChange={(event) => setAdminLogin(event.target.value)}
+                autoComplete="username"
+                placeholder="Логин"
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-3 text-slate-100 placeholder:text-slate-500 outline-none focus:border-blue-500"
+              />
+              <input
+                value={adminPassword}
+                onChange={(event) => setAdminPassword(event.target.value)}
+                autoComplete="current-password"
+                placeholder="Пароль"
+                type="password"
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-3 text-slate-100 placeholder:text-slate-500 outline-none focus:border-blue-500"
+              />
+              <button
+                onClick={handlePasswordLogin}
+                disabled={loggingIn}
+                className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium rounded-lg p-3 transition-colors"
+              >
+                {loggingIn ? 'Вход...' : 'Войти по логину'}
+              </button>
+            </div>
+
             <button
               onClick={handleLogin}
               disabled={loggingIn}
-              className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium rounded-lg p-3 transition-colors"
+              className="w-full bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white font-medium rounded-lg p-3 transition-colors"
             >
-              {loggingIn ? 'Вход...' : 'Войти'}
+              {loggingIn ? 'Вход...' : 'Войти через Telegram'}
             </button>
           </div>
         </div>

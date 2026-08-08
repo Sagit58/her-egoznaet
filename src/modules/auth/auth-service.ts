@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 
 import type { AuthContext } from '../../common/auth/auth-context.types';
 import { AppError } from '../../common/errors/app-error';
@@ -73,6 +73,29 @@ export class AuthService {
     if (!employee) {
       throw AppError.forbidden('Employee not found');
     }
+
+    return this.issueTokens(employee);
+  }
+
+  async loginByPassword(login: string, password: string): Promise<AuthTokens> {
+    if (!env.SUPERADMIN_LOGIN || !env.SUPERADMIN_PASSWORD) {
+      throw new AppError({
+        code: 'INTERNAL_ERROR',
+        message: 'Superadmin login is not configured',
+        statusCode: 500,
+      });
+    }
+
+    if (
+      !safeEqual(login, env.SUPERADMIN_LOGIN) ||
+      !safeEqual(password, env.SUPERADMIN_PASSWORD)
+    ) {
+      throw AppError.unauthorized('Invalid login or password');
+    }
+
+    const employee = await this.employeeAuthRepository.upsertSuperAdmin(
+      env.SUPERADMIN_EMPLOYEE_ID,
+    );
 
     return this.issueTokens(employee);
   }
@@ -168,3 +191,14 @@ export class AuthService {
     };
   }
 }
+
+const safeEqual = (actual: string, expected: string): boolean => {
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+
+  if (actualBuffer.length !== expectedBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(actualBuffer, expectedBuffer);
+};

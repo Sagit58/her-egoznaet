@@ -1,7 +1,7 @@
 import { ArrowLeft, FileText, MapPin, Plus, RefreshCw, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { api, uploadFile } from '../api';
+import { api } from '../api';
 import { OrderDetailScreen } from './OrderDetailScreen';
 
 interface OrderCustomer {

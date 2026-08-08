@@ -62,7 +62,14 @@ const start = async (): Promise<void> => {
 
     const container = createContainer();
 
-    await container.storageService.ensureBucket();
+    try {
+      await container.storageService.ensureBucket();
+    } catch (error) {
+      logger.warn(
+        { error },
+        'File storage is unavailable; file uploads and downloads may fail',
+      );
+    }
 
     registerRoutes(server, container);
 
