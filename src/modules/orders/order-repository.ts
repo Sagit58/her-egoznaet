@@ -1,11 +1,13 @@
 import type { OrderStatus, Prisma } from '@prisma/client';
 
+import { AppError } from '../../common/errors/app-error';
 import {
   buildPaginated,
   normalizePage,
 } from '../../common/pagination/pagination';
 import type { Paginated } from '../../common/pagination/pagination.types';
 import { prisma } from '../../database/prisma-client';
+import type { NewCustomerInput } from './order.schemas';
 
 const orderInclude = {
   customer: {
@@ -42,7 +44,8 @@ export type OrderRecord = Prisma.OrderGetPayload<{
 }>;
 
 export interface OrderWriteInput {
-  readonly customerId: string;
+  readonly customerId?: string | null;
+  readonly newCustomer?: NewCustomerInput;
   readonly graveSiteId?: string | null;
   readonly managerId?: string | null;
   readonly comment?: string | null;
@@ -95,13 +98,34 @@ export interface OrderStats {
 export class OrderRepository {
   async create(input: OrderWriteInput): Promise<OrderRecord> {
     return prisma.$transaction(async (tx) => {
+      let customerId = input.customerId ?? null;
+
+      if (!customerId && input.newCustomer) {
+        const created = await tx.customer.create({
+          data: {
+            firstName: input.newCustomer.firstName,
+            lastName: input.newCustomer.lastName,
+            middleName: input.newCustomer.middleName ?? null,
+            phone: input.newCustomer.phone,
+            email: input.newCustomer.email ?? null,
+            comment: input.newCustomer.comment ?? null,
+          },
+        });
+
+        customerId = created.id;
+      }
+
+      if (!customerId) {
+        throw AppError.badRequest('Необходимо указать customerId или newCustomer');
+      }
+
       const max = await tx.order.aggregate({ _max: { number: true } });
       const nextNumber = (max._max.number ?? 0) + 1;
 
       return tx.order.create({
         data: {
           number: nextNumber,
-          customerId: input.customerId,
+          customerId,
           graveSiteId: input.graveSiteId ?? null,
           managerId: input.managerId ?? null,
           comment: input.comment ?? null,

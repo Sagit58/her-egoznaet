@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Route, BrowserRouter as Router, Routes } from 'react-router-dom';
+import { Toaster } from 'sonner';
 
 import './index.css';
 import { AuthGate, Dashboard, LoginCard } from './App.tsx';
@@ -15,6 +16,7 @@ import { OrdersScreen } from './screens/OrdersScreen.tsx';
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <Router>
+      <Toaster position="top-center" richColors theme="dark" />
       <Routes>
         <Route path="/login" element={<LoginCard />} />
 

@@ -1,6 +1,7 @@
 import { ArrowLeft, MapPin, Image as ImageIcon, Pencil, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { toast } from 'sonner';
 
 import { api, uploadFile } from '../api';
 import { EmptyState, StatusBadge } from '../components';
@@ -59,6 +60,11 @@ interface OrderDetail {
     readonly lastName: string;
     readonly phone: string;
   };
+  readonly manager?: {
+    readonly id: string;
+    readonly firstName: string;
+    readonly lastName: string;
+  } | null;
   readonly grave_site?: {
     readonly id: string;
     readonly name: string;
@@ -115,6 +121,14 @@ export const OrderDetailScreen = () => {
   const [paymentComment, setPaymentComment] = useState('');
   const [addingPayment, setAddingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+
+  // Редактирование основных полей заказа (комментарий / сумма / менеджер).
+  const [editingOrder, setEditingOrder] = useState(false);
+  const [savingOrder, setSavingOrder] = useState(false);
+  const [orderError, setOrderError] = useState<string | null>(null);
+  const [editComment, setEditComment] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editManagerId, setEditManagerId] = useState('');
 
   const loadOrder = async () => {
     if (!orderId) {
@@ -188,9 +202,12 @@ export const OrderDetailScreen = () => {
         await uploadFile(file, { category: 'SURVEY_PHOTO', orderId });
       }
 
+      toast.success('Фото загружены');
       await loadFiles();
     } catch (err: any) {
-      setUploadError(err.response?.data?.message || err.message || 'Ошибка');
+      const message = err.response?.data?.message || err.message || 'Ошибка';
+      setUploadError(message);
+      toast.error(message);
     } finally {
       setUploading(false);
     }
@@ -281,6 +298,7 @@ export const OrderDetailScreen = () => {
       setLatitude(null);
       setLongitude(null);
 
+      toast.success('Место сохранено');
       await loadOrder();
     } catch (err: any) {
       setLocationError(err.response?.data?.message || err.message || 'Ошибка');
@@ -299,9 +317,12 @@ export const OrderDetailScreen = () => {
 
     try {
       await api.post(`/orders/${order.id}/status`, { status: newStatus });
+      toast.success('Статус обновлён');
       await loadOrder();
     } catch (err: any) {
-      setStatusError(err.response?.data?.message || err.message || 'Ошибка');
+      const message = err.response?.data?.message || err.message || 'Ошибка';
+      setStatusError(message);
+      toast.error(message);
     } finally {
       setChangingStatus(false);
     }
@@ -354,11 +375,68 @@ export const OrderDetailScreen = () => {
       await api.post(`/orders/${order.id}/payments`, body);
       setPaymentAmount('');
       setPaymentComment('');
+      toast.success('Платёж добавлен');
       await loadOrder();
     } catch (err: any) {
-      setPaymentError(err.response?.data?.message || err.message || 'Ошибка');
+      const message = err.response?.data?.message || err.message || 'Ошибка';
+      setPaymentError(message);
+      toast.error(message);
     } finally {
       setAddingPayment(false);
+    }
+  };
+
+  const startEditOrder = () => {
+    if (!order) {
+      return;
+    }
+
+    setEditComment(order.comment ?? '');
+    setEditAmount(order.totalAmount ? String(order.totalAmount) : '');
+    setEditManagerId(order.manager?.id ?? '');
+    setOrderError(null);
+    setEditingOrder(true);
+  };
+
+  const handleSaveOrder = async () => {
+    if (!order) {
+      return;
+    }
+
+    setSavingOrder(true);
+    setOrderError(null);
+
+    try {
+      const body: Record<string, unknown> = {};
+
+      if (editComment !== (order.comment ?? '')) {
+        body.comment = editComment.trim() || null;
+      }
+
+      if (editAmount !== '' && Number(editAmount) !== order.totalAmount) {
+        body.totalAmount = Number(editAmount);
+      }
+
+      const newManagerId = editManagerId || null;
+      if (newManagerId !== (order.manager?.id ?? null)) {
+        body.managerId = newManagerId;
+      }
+
+      const hasChanges = Object.keys(body).length > 0;
+
+      if (hasChanges) {
+        await api.patch(`/orders/${order.id}`, body);
+        toast.success('Заказ сохранён');
+        await loadOrder();
+      }
+
+      setEditingOrder(false);
+    } catch (err: any) {
+      const message = err.response?.data?.message || err.message || 'Ошибка';
+      setOrderError(message);
+      toast.error(message);
+    } finally {
+      setSavingOrder(false);
     }
   };
 
@@ -502,17 +580,98 @@ export const OrderDetailScreen = () => {
             </div>
 
             <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
-              <div className="text-sm text-slate-400 mb-1">Дата создания</div>
+              <div className="flex items-center justify-between mb-1">
+                <div className="text-sm text-slate-400">Дата создания</div>
+                {!editingOrder && (
+                  <button
+                    onClick={startEditOrder}
+                    className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                    aria-label="Редактировать заказ"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    Редактировать
+                  </button>
+                )}
+              </div>
               <div className="text-slate-100">
                 {new Date(order.createdAt).toLocaleString('ru-RU')}
               </div>
             </div>
 
-            {order.comment && (
-              <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
-                <div className="text-sm text-slate-400 mb-2">Комментарий</div>
-                <div className="text-slate-100 text-sm">{order.comment}</div>
+            {editingOrder ? (
+              <div className="bg-slate-800 rounded-lg p-4 border border-slate-700 space-y-3">
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">Сумма (₽)</label>
+                  <input
+                    type="number"
+                    value={editAmount}
+                    onChange={(e) => setEditAmount(e.target.value)}
+                    placeholder="50000"
+                    className="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm text-slate-100"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">Менеджер</label>
+                  <select
+                    value={editManagerId}
+                    onChange={(e) => setEditManagerId(e.target.value)}
+                    className="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm text-slate-100"
+                  >
+                    <option value="">— Без менеджера —</option>
+                    {employees.map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.lastName} {emp.firstName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">Комментарий</label>
+                  <textarea
+                    value={editComment}
+                    onChange={(e) => setEditComment(e.target.value)}
+                    placeholder="Памятник из гранита"
+                    rows={3}
+                    className="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm text-slate-100 resize-none"
+                  />
+                </div>
+                {orderError && (
+                  <p className="text-red-400 text-sm">{orderError}</p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSaveOrder}
+                    disabled={savingOrder}
+                    className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium rounded-lg p-3 transition-colors"
+                  >
+                    {savingOrder ? 'Сохранение...' : 'Сохранить'}
+                  </button>
+                  <button
+                    onClick={() => setEditingOrder(false)}
+                    className="px-4 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg p-3 transition-colors"
+                  >
+                    Отмена
+                  </button>
+                </div>
               </div>
+            ) : (
+              <>
+                {order.comment && (
+                  <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
+                    <div className="text-sm text-slate-400 mb-2">Комментарий</div>
+                    <div className="text-slate-100 text-sm">{order.comment}</div>
+                  </div>
+                )}
+
+                {order.manager && (
+                  <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
+                    <div className="text-sm text-slate-400 mb-1">Менеджер</div>
+                    <div className="text-slate-100">
+                      {order.manager.firstName} {order.manager.lastName}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
             {/* Смена статуса */}

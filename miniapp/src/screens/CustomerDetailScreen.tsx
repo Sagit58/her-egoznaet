@@ -1,6 +1,7 @@
-import { Trash2, UserPlus, Users } from 'lucide-react';
+import { Pencil, Trash2, UserPlus, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { toast } from 'sonner';
 
 import { api } from '../api';
 import { EmptyState, ScreenLayout, StatusBadge } from '../components';
@@ -59,6 +60,17 @@ export const CustomerDetailScreen = () => {
   const [noteText, setNoteText] = useState('');
   const [savingNote, setSavingNote] = useState(false);
 
+  // Редактирование профиля клиента.
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [editLastName, setEditLastName] = useState('');
+  const [editFirstName, setEditFirstName] = useState('');
+  const [editMiddleName, setEditMiddleName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editComment, setEditComment] = useState('');
+
   const loadCustomer = async () => {
     if (!id) {
       return;
@@ -112,6 +124,10 @@ export const CustomerDetailScreen = () => {
       setContactName('');
       setContactPhone('');
       setContactRelation('');
+    } catch (err: any) {
+      const message = err.response?.data?.message || err.message || 'Ошибка';
+      setError(message);
+      toast.error(message);
     } finally {
       setSavingContact(false);
     }
@@ -124,9 +140,12 @@ export const CustomerDetailScreen = () => {
 
     try {
       await api.delete(`/customers/${id}/contacts/${contactId}`);
+      toast.success('Контакт удалён');
       await loadCustomer();
     } catch (err: any) {
-      setError(err.message || 'Ошибка удаления');
+      const message = err.message || 'Ошибка удаления';
+      setError(message);
+      toast.error(message);
     }
   };
 
@@ -141,8 +160,72 @@ export const CustomerDetailScreen = () => {
       await api.post(`/customers/${id}/notes`, { text: noteText.trim() });
       await loadCustomer();
       setNoteText('');
+    } catch (err: any) {
+      const message = err.response?.data?.message || err.message || 'Ошибка';
+      setError(message);
+      toast.error(message);
     } finally {
       setSavingNote(false);
+    }
+  };
+
+  const startEditProfile = () => {
+    if (!customer) {
+      return;
+    }
+
+    setEditFirstName(customer.firstName);
+    setEditLastName(customer.lastName);
+    setEditMiddleName(customer.middleName ?? '');
+    setEditPhone(customer.phone);
+    setEditEmail(customer.email ?? '');
+    setEditComment(customer.comment ?? '');
+    setProfileError(null);
+    setEditingProfile(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!id) {
+      return;
+    }
+
+    if (!editLastName || !editFirstName || !editPhone) {
+      setProfileError('Заполните фамилию, имя и телефон');
+      return;
+    }
+
+    setSavingProfile(true);
+    setProfileError(null);
+
+    try {
+      const body: Record<string, unknown> = {
+        firstName: editFirstName,
+        lastName: editLastName,
+        phone: editPhone,
+      };
+
+      if (editMiddleName) {
+        body.middleName = editMiddleName;
+      }
+
+      if (editEmail) {
+        body.email = editEmail;
+      }
+
+      if (editComment) {
+        body.comment = editComment;
+      }
+
+      await api.patch(`/customers/${id}`, body);
+      setEditingProfile(false);
+      toast.success('Клиент сохранён');
+      await loadCustomer();
+    } catch (err: any) {
+      const message = err.response?.data?.message || err.message || 'Ошибка';
+      setProfileError(message);
+      toast.error(message);
+    } finally {
+      setSavingProfile(false);
     }
   };
 
@@ -169,19 +252,108 @@ export const CustomerDetailScreen = () => {
       <div className="space-y-3">
         {/* Контактные данные */}
         <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
-          <div className="text-sm text-slate-400 mb-1">Телефон</div>
-          <div className="text-slate-100">{customer.phone}</div>
-          {customer.email && (
-            <>
-              <div className="text-sm text-slate-400 mt-2 mb-1">Email</div>
-              <div className="text-slate-100">{customer.email}</div>
-            </>
-          )}
-          {customer.comment && (
-            <div className="mt-3 pt-3 border-t border-slate-700">
-              <div className="text-sm text-slate-400 mb-1">Комментарий</div>
-              <div className="text-slate-100 text-sm">{customer.comment}</div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-slate-400">Контактные данные</span>
+            {!editingProfile && (
+              <button
+                onClick={startEditProfile}
+                className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                aria-label="Редактировать профиль"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Редактировать
+              </button>
+            )}
+          </div>
+
+          {editingProfile ? (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Фамилия</label>
+                <input
+                  value={editLastName}
+                  onChange={(e) => setEditLastName(e.target.value)}
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg p-2 text-sm text-slate-100"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Имя</label>
+                <input
+                  value={editFirstName}
+                  onChange={(e) => setEditFirstName(e.target.value)}
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg p-2 text-sm text-slate-100"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Отчество</label>
+                <input
+                  value={editMiddleName}
+                  onChange={(e) => setEditMiddleName(e.target.value)}
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg p-2 text-sm text-slate-100"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Телефон</label>
+                <input
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg p-2 text-sm text-slate-100"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Email</label>
+                <input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg p-2 text-sm text-slate-100"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Комментарий</label>
+                <textarea
+                  value={editComment}
+                  onChange={(e) => setEditComment(e.target.value)}
+                  rows={2}
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg p-2 text-sm text-slate-100 resize-none"
+                />
+              </div>
+              {profileError && (
+                <p className="text-red-400 text-sm">{profileError}</p>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveProfile}
+                  disabled={savingProfile}
+                  className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium rounded-lg p-2 text-sm transition-colors"
+                >
+                  {savingProfile ? 'Сохранение...' : 'Сохранить'}
+                </button>
+                <button
+                  onClick={() => setEditingProfile(false)}
+                  className="px-4 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg p-2 text-sm transition-colors"
+                >
+                  Отмена
+                </button>
+              </div>
             </div>
+          ) : (
+            <>
+              <div className="text-sm text-slate-400 mb-1">Телефон</div>
+              <div className="text-slate-100">{customer.phone}</div>
+              {customer.email && (
+                <>
+                  <div className="text-sm text-slate-400 mt-2 mb-1">Email</div>
+                  <div className="text-slate-100">{customer.email}</div>
+                </>
+              )}
+              {customer.comment && (
+                <div className="mt-3 pt-3 border-t border-slate-700">
+                  <div className="text-sm text-slate-400 mb-1">Комментарий</div>
+                  <div className="text-slate-100 text-sm">{customer.comment}</div>
+                </div>
+              )}
+            </>
           )}
         </div>
 

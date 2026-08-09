@@ -1,6 +1,7 @@
 import { Plus, RefreshCw, Search, Users, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 import { api } from '../api';
 import { EmptyState, ScreenLayout } from '../components';
@@ -25,6 +26,9 @@ export const CustomersScreen = () => {
   const [lastName, setLastName] = useState('');
   const [firstName, setFirstName] = useState('');
   const [phone, setPhone] = useState('');
+  const [middleName, setMiddleName] = useState('');
+  const [email, setEmail] = useState('');
+  const [comment, setComment] = useState('');
   const [search, setSearch] = useState('');
 
   const loadCustomers = async () => {
@@ -64,16 +68,36 @@ export const CustomersScreen = () => {
     setFormError(null);
 
     try {
-      await api.post('/customers', { lastName, firstName, phone });
+      const body: Record<string, unknown> = { lastName, firstName, phone };
+
+      if (middleName) {
+        body.middleName = middleName;
+      }
+
+      if (email) {
+        body.email = email;
+      }
+
+      if (comment) {
+        body.comment = comment;
+      }
+
+      await api.post('/customers', body);
 
       setLastName('');
       setFirstName('');
       setPhone('');
+      setMiddleName('');
+      setEmail('');
+      setComment('');
       setShowForm(false);
 
+      toast.success('Клиент создан');
       await loadCustomers();
     } catch (err: any) {
-      setFormError(err.response?.data?.message || err.message || 'Ошибка');
+      const message = err.response?.data?.message || err.message || 'Ошибка';
+      setFormError(message);
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -122,6 +146,34 @@ export const CustomersScreen = () => {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="+7 900 000-00-00"
+              className="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm text-slate-100"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">Отчество</label>
+            <input
+              value={middleName}
+              onChange={(e) => setMiddleName(e.target.value)}
+              placeholder="Иванович"
+              className="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm text-slate-100"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="ivanov@example.com"
+              className="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm text-slate-100"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">Комментарий</label>
+            <input
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Доп. информация о клиенте"
               className="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm text-slate-100"
             />
           </div>

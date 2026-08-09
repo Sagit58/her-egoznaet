@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OrderRepository = void 0;
+const app_error_1 = require("../../common/errors/app-error");
 const pagination_1 = require("../../common/pagination/pagination");
 const prisma_client_1 = require("../../database/prisma-client");
 const orderInclude = {
@@ -35,12 +36,29 @@ const orderInclude = {
 class OrderRepository {
     async create(input) {
         return prisma_client_1.prisma.$transaction(async (tx) => {
+            let customerId = input.customerId ?? null;
+            if (!customerId && input.newCustomer) {
+                const created = await tx.customer.create({
+                    data: {
+                        firstName: input.newCustomer.firstName,
+                        lastName: input.newCustomer.lastName,
+                        middleName: input.newCustomer.middleName ?? null,
+                        phone: input.newCustomer.phone,
+                        email: input.newCustomer.email ?? null,
+                        comment: input.newCustomer.comment ?? null,
+                    },
+                });
+                customerId = created.id;
+            }
+            if (!customerId) {
+                throw app_error_1.AppError.badRequest('Необходимо указать customerId или newCustomer');
+            }
             const max = await tx.order.aggregate({ _max: { number: true } });
             const nextNumber = (max._max.number ?? 0) + 1;
             return tx.order.create({
                 data: {
                     number: nextNumber,
-                    customerId: input.customerId,
+                    customerId,
                     graveSiteId: input.graveSiteId ?? null,
                     managerId: input.managerId ?? null,
                     comment: input.comment ?? null,

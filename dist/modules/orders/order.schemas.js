@@ -22,17 +22,35 @@ exports.orderStageParamSchema = zod_1.z.object({
     id: zod_1.z.string().uuid(),
     type: zod_1.z.enum(exports.STAGE_TYPES),
 });
-exports.createOrderBodySchema = zod_1.z.object({
-    customerId: zod_1.z.string().uuid(),
+/**
+ * Встроенный клиент — альтернатива `customerId` при создании заказа.
+ * Позволяет создать клиента и заказ атомарно в одной транзакции.
+ */
+const newCustomerSchema = zod_1.z.object({
+    firstName: zod_1.z.string().trim().min(1),
+    lastName: zod_1.z.string().trim().min(1),
+    middleName: zod_1.z.string().trim().optional(),
+    phone: zod_1.z.string().trim().min(1),
+    email: zod_1.z.string().trim().optional(),
+    comment: zod_1.z.string().trim().optional(),
+});
+exports.createOrderBodySchema = zod_1.z
+    .object({
+    customerId: zod_1.z.string().uuid().optional(),
+    newCustomer: newCustomerSchema.optional(),
     number: zod_1.z.number().int().positive().optional(),
     graveSiteId: zod_1.z.string().uuid().optional(),
     managerId: zod_1.z.string().uuid().optional(),
     comment: zod_1.z.string().trim().optional(),
     totalAmount: zod_1.z.number().nonnegative().optional(),
+})
+    .refine((data) => data.customerId ?? data.newCustomer, {
+    message: 'Необходимо указать customerId или newCustomer',
+    path: ['customerId'],
 });
 exports.updateOrderBodySchema = zod_1.z.object({
-    graveSiteId: zod_1.z.string().uuid().optional(),
-    managerId: zod_1.z.string().uuid().optional(),
+    graveSiteId: zod_1.z.string().uuid().nullable().optional(),
+    managerId: zod_1.z.string().uuid().nullable().optional(),
     comment: zod_1.z.string().trim().optional(),
     totalAmount: zod_1.z.number().nonnegative().optional(),
 });

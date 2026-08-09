@@ -1,9 +1,17 @@
 import { FileText, Plus, RefreshCw, Search, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 import { api } from '../api';
-import { EmptyState, ScreenLayout, StatusBadge } from '../components';
+import {
+  CustomerCombobox,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  ScreenLayout,
+  StatusBadge,
+} from '../components';
 import {
   ORDER_STATUSES,
   ORDER_STATUS_COLORS,
@@ -25,12 +33,6 @@ interface Order {
   readonly customer?: OrderCustomer | null;
 }
 
-interface CustomerOption {
-  readonly id: string;
-  readonly firstName: string;
-  readonly lastName: string;
-}
-
 type SortField = 'createdAt' | 'number' | 'totalAmount';
 
 const SORT_LABELS: Record<SortField, string> = {
@@ -42,7 +44,6 @@ const SORT_LABELS: Record<SortField, string> = {
 export const OrdersScreen = () => {
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -50,7 +51,7 @@ export const OrdersScreen = () => {
   const [formError, setFormError] = useState<string | null>(null);
 
   const [orderNumber, setOrderNumber] = useState('');
-  const [customerId, setCustomerId] = useState('');
+  const [customerId, setCustomerId] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
   const [comment, setComment] = useState('');
   const [address, setAddress] = useState('');
@@ -58,6 +59,15 @@ export const OrdersScreen = () => {
   const [longitude, setLongitude] = useState<number | null>(null);
   const [detecting, setDetecting] = useState(false);
   const [photos, setPhotos] = useState<File[]>([]);
+
+  // Режим клиента в форме заказа: выбор существующего или создание нового «на лету».
+  const [customerMode, setCustomerMode] = useState<'existing' | 'new'>('existing');
+  const [newLastName, setNewLastName] = useState('');
+  const [newFirstName, setNewFirstName] = useState('');
+  const [newMiddleName, setNewMiddleName] = useState('');
+  const [newPhone, setNewPhone] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newComment, setNewComment] = useState('');
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -81,13 +91,9 @@ export const OrdersScreen = () => {
       params.set('sortBy', sortBy);
       params.set('sortOrder', 'desc');
 
-      const [ordersResponse, customersResponse] = await Promise.all([
-        api.get(`/orders?${params.toString()}`),
-        api.get('/customers?pageSize=100'),
-      ]);
+      const ordersResponse = await api.get(`/orders?${params.toString()}`);
 
       setOrders(ordersResponse.data.items || []);
-      setCustomers(customersResponse.data.items || []);
     } catch (err: any) {
       setError(err.message || 'Ошибка загрузки');
     } finally {
@@ -142,8 +148,29 @@ export const OrdersScreen = () => {
     });
   };
 
+  const resetCustomerFields = () => {
+    setCustomerMode('existing');
+    setCustomerId(null);
+    setNewLastName('');
+    setNewFirstName('');
+    setNewMiddleName('');
+    setNewPhone('');
+    setNewEmail('');
+    setNewComment('');
+  };
+
+  const handleSwitchToNewCustomer = () => {
+    setCustomerMode('new');
+    setCustomerId(null);
+  };
+
   const handleCreate = async () => {
-    if (!customerId) {
+    if (customerMode === 'new') {
+      if (!newLastName || !newFirstName || !newPhone) {
+        setFormError('Заполните фамилию, имя и телефон нового клиента');
+        return;
+      }
+    } else if (!customerId) {
       setFormError('Выберите клиента');
       return;
     }
@@ -154,7 +181,10 @@ export const OrdersScreen = () => {
     try {
       let graveSiteId: string | undefined;
 
-      if (address || latitude !== null) {
+      // Место захоронения связывается с customerId. Для нового клиента
+      // id появится только после создания заказа, поэтому в режиме «новый»
+      // grave_site здесь не создаём (его можно заполнить позже на экране заказа).
+      if (customerMode === 'existing' && customerId && (address || latitude !== null)) {
         const graveSiteBody: Record<string, unknown> = {
           customerId,
           name: 'Место захоронения',
@@ -176,14 +206,38 @@ export const OrdersScreen = () => {
         graveSiteId = graveSiteResponse.data.id;
       }
 
-      const body: Record<string, unknown> = { customerId };
+      const body: Record<string, unknown> = {};
+
+      if (customerMode === 'new') {
+        const newCustomer: Record<string, unknown> = {
+          lastName: newLastName,
+          firstName: newFirstName,
+          phone: newPhone,
+        };
+
+        if (newMiddleName) {
+          newCustomer.middleName = newMiddleName;
+        }
+
+        if (newEmail) {
+          newCustomer.email = newEmail;
+        }
+
+        if (newComment) {
+          newCustomer.comment = newComment;
+        }
+
+        body.newCustomer = newCustomer;
+      } else {
+        body.customerId = customerId;
+
+        if (graveSiteId) {
+          body.graveSiteId = graveSiteId;
+        }
+      }
 
       if (orderNumber) {
         body.number = Number(orderNumber);
-      }
-
-      if (graveSiteId) {
-        body.graveSiteId = graveSiteId;
       }
 
       if (amount) {
@@ -201,7 +255,7 @@ export const OrdersScreen = () => {
       }
 
       setOrderNumber('');
-      setCustomerId('');
+      resetCustomerFields();
       setAmount('');
       setComment('');
       setAddress('');
@@ -210,9 +264,12 @@ export const OrdersScreen = () => {
       setPhotos([]);
       setShowForm(false);
 
+      toast.success('Заказ создан');
       await loadData();
     } catch (err: any) {
-      setFormError(err.response?.data?.message || err.message || 'Ошибка');
+      const message = err.response?.data?.message || err.message || 'Ошибка';
+      setFormError(message);
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -247,21 +304,94 @@ export const OrdersScreen = () => {
               className="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm text-slate-100"
             />
           </div>
-          <div>
-            <label className="text-xs text-slate-400 mb-1 block">Клиент</label>
-            <select
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm text-slate-100"
-            >
-              <option value="">— Выберите клиента —</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.lastName} {c.firstName}
-                </option>
-              ))}
-            </select>
-          </div>
+          {customerMode === 'existing' ? (
+            <>
+              <CustomerCombobox
+                value={customerId}
+                onChange={setCustomerId}
+                onCreateNew={handleSwitchToNewCustomer}
+              />
+              {customerId && (
+                <button
+                  type="button"
+                  onClick={resetCustomerFields}
+                  className="text-xs text-slate-500 hover:text-slate-300"
+                >
+                  Сменить клиента
+                </button>
+              )}
+            </>
+          ) : (
+            <div className="space-y-3 rounded-lg bg-slate-700/30 p-3 border border-slate-700">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-blue-400 font-medium">
+                  Новый клиент
+                </span>
+                <button
+                  type="button"
+                  onClick={resetCustomerFields}
+                  className="text-xs text-slate-500 hover:text-slate-300"
+                >
+                  ← Выбрать существующего
+                </button>
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Фамилия</label>
+                <input
+                  value={newLastName}
+                  onChange={(e) => setNewLastName(e.target.value)}
+                  placeholder="Иванов"
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm text-slate-100"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Имя</label>
+                <input
+                  value={newFirstName}
+                  onChange={(e) => setNewFirstName(e.target.value)}
+                  placeholder="Иван"
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm text-slate-100"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Отчество</label>
+                <input
+                  value={newMiddleName}
+                  onChange={(e) => setNewMiddleName(e.target.value)}
+                  placeholder="Иванович"
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm text-slate-100"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Телефон</label>
+                <input
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value)}
+                  placeholder="+7 900 000-00-00"
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm text-slate-100"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Email</label>
+                <input
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="ivanov@example.com"
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm text-slate-100"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Комментарий</label>
+                <input
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  placeholder="Доп. информация о клиенте"
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-sm text-slate-100"
+                />
+              </div>
+            </div>
+          )}
           <div>
             <label className="text-xs text-slate-400 mb-1 block">Сумма (₽)</label>
             <input
@@ -384,17 +514,9 @@ export const OrdersScreen = () => {
         ))}
       </div>
 
-      {loading && (
-        <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
-          <p className="text-slate-400 text-sm">Загрузка...</p>
-        </div>
-      )}
+      {loading && <LoadingState />}
 
-      {error && (
-        <div className="bg-red-900/20 rounded-lg p-4 border border-red-800">
-          <p className="text-red-400 text-sm">Ошибка: {error}</p>
-        </div>
-      )}
+      {error && <ErrorState error={error} />}
 
       {!loading && !error && orders.length === 0 && (
         <EmptyState icon={FileText} title="Заказов пока нет" hint="Нажмите «+», чтобы создать" />

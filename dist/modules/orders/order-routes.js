@@ -11,7 +11,8 @@ const registerOrderRoutes = (app, service, guard) => {
         }
         const body = parsed.data;
         const order = await service.create({
-            customerId: body.customerId,
+            customerId: body.customerId ?? null,
+            newCustomer: body.newCustomer,
             graveSiteId: body.graveSiteId ?? null,
             managerId: body.managerId ?? null,
             comment: body.comment ?? null,
